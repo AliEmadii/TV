@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>پخش زنده تلویزیون و رادیو ایران</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Vazirmatn', sans-serif; }
+        .channel-card:hover { transform: scale(1.05); }
+        .channel-card.active { ring: 4px; }
+        .category-btn.active { background: linear-gradient(135deg, #3b82f6, #8b5cf6); }
+        .player-container { aspect-ratio: 16/9; }
+        .quality-menu { display: none; }
+        .quality-menu.show { display: block; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes pulse-live { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .live-indicator { animation: pulse-live 1.5s infinite; }
+        .gradient-bg { background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%); }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-700">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">تلویزیون زنده</h1>
+                        <p class="text-xs text-slate-400">پخش زنده شبکه‌های ایران</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="live-indicator w-3 h-3 bg-red-500 rounded-full"></span>
+                    <span class="text-sm text-slate-300">زنده</span>
+                </div>
+            </div>
+        </div>
+    </header>
+    <main class="container mx-auto px-4 py-6">
+        <!-- Player Section -->
+        <div class="mb-8">
+            <div class="bg-slate-800/50 rounded-2xl overflow-hidden shadow-2xl border border-slate-700">
+                <!-- Video Player -->
+                <div class="player-container relative bg-black">
+                    <video id="videoPlayer" class="w-full h-full" playsinline></video>
+                    
+                    <!-- Loading Overlay -->
+                    <div id="loadingOverlay" class="absolute inset-0 flex items-center justify-center bg-black/80 hidden">
+                        <div class="text-center">
+                            <div class="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <p class="text-slate-300">در حال بارگذاری...</p>
+                        </div>
+                    </div>
+                    <!-- Error Overlay -->
+                    <div id="errorOverlay" class="absolute inset-0 flex items-center justify-center bg-black/80 hidden">
+                        <div class="text-center p-6">
+                            <svg class="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <p class="text-slate-300 mb-4">خطا در پخش ویدیو</p>
+                            <button onclick="retryPlay()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition">تلاش مجدد</button>
+                        </div>
+                    </div>
+                    <!-- Placeholder -->
+                    <div id="placeholderOverlay" class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+                        <div class="text-center">
+                            <svg class="w-24 h-24 text-slate-600 mx-auto mb-4" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/>
+                            </svg>
+                            <p class="text-slate-400 text-lg">یک شبکه را انتخاب کنید</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Controls -->
+                <div class="bg-slate-900/90 p-4">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <!-- Current Channel Info -->
+                        <div class="flex items-center gap-3">
+                            <div id="currentChannelIcon" class="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center text-lg">📺</div>
+                            <div>
+                                <h3 id="currentChannelName" class="font-bold text-white">شبکه‌ای انتخاب نشده</h3>
+                                <p id="currentChannelCategory" class="text-xs text-slate-400">برای شروع یک شبکه انتخاب کنید</p>
+                            </div>
+                        </div>
+                        <!-- Player Controls -->
+                        <div class="flex items-center gap-2">
+                            <!-- Play/Pause -->
+                            <button id="playPauseBtn" onclick="togglePlayPause()" class="w-12 h-12 bg-slate-700 hover:bg-slate-600 rounded-xl flex items-center justify-center transition">
+                                <svg id="playIcon" class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                                <svg id="pauseIcon" class="w-6 h-6 hidden" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                                </svg>
+                            </button>
+                            <!-- Live Button -->
+                            <button onclick="goLive()" class="px-4 h-12 bg-red-600 hover:bg-red-700 rounded-xl flex items-center gap-2 transition">
+                                <span class="w-2 h-2 bg-white rounded-full live-indicator"></span>
+                                <span class="font-medium">زنده</span>
+                            </button>
+                            <!-- Quality Selector -->
+                            <div class="relative">
+                                <button onclick="toggleQualityMenu()" class="px-4 h-12 bg-slate-700 hover:bg-slate-600 rounded-xl flex items-center gap-2 transition">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                    <span id="currentQuality">کیفیت</span>
+                                </button>
+                                <div id="qualityMenu" class="quality-menu absolute bottom-full right-0 mb-2 bg-slate-800 rounded-xl overflow-hidden shadow-xl border border-slate-600 min-w-[150px]">
+                                    <!-- Quality options will be added dynamically -->
+                                </div>
+                            </div>
+                            <!-- Fullscreen -->
+                            <button onclick="toggleFullscreen()" class="w-12 h-12 bg-slate-700 hover:bg-slate-600 rounded-xl flex items-center justify-center transition">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Category Tabs -->
+        <div class="mb-6 overflow-x-auto scrollbar-hide">
+            <div class="flex gap-2 min-w-max pb-2">
+                <button onclick="filterCategory('all')" class="category-btn active px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="all">
+                    همه
+                </button>
+                <button onclick="filterCategory('main')" class="category-btn px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="main">
+                    📺 شبکه‌های اصلی
+                </button>
+                <button onclick="filterCategory('special')" class="category-btn px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="special">
+                    🎯 شبکه‌های تخصصی
+                </button>
+                <button onclick="filterCategory('provincial')" class="category-btn px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="provincial">
+                    🏛️ شبکه‌های استانی
+                </button>
+                <button onclick="filterCategory('international')" class="category-btn px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="international">
+                    🌍 شبکه‌های بین‌المللی
+                </button>
+                <button onclick="filterCategory('radio')" class="category-btn px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="radio">
+                    📻 رادیوها
+                </button>
+                <button onclick="filterCategory('other')" class="category-btn px-5 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium transition whitespace-nowrap" data-category="other">
+                    ✨ سایر شبکه‌ها
+                </button>
+            </div>
+        </div>
+        <!-- Channels Grid -->
+        <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            <!-- Channels will be rendered here -->
+        </div>
+    </main>
+    <!-- Footer -->
+    <footer class="mt-12 py-6 border-t border-slate-800">
+        <div class="container mx-auto px-4 text-center text-slate-500 text-sm">
+            <p>پخش زنده تلویزیون و رادیو ایران</p>
+        </div>
+    </footer>
+    <script>
+        // Channel Data
+        const channels = [
+            // Main Channels
+            { id: 1, name: 'شبکه ۱', url: 'http://92.42.50.29/PLTV/88888888/224/3221226637/index.m3u8', category: 'main', icon: '۱' },
+            { id: 2, name: 'شبکه ۲', url: 'http://92.42.50.29/PLTV/88888888/224/3221226176/index.m3u8', category: 'main', icon: '۲' },
+            { id: 3, name: 'شبکه ۳', url: 'http://92.42.50.29/PLTV/88888888/224/3221226868/index.m3u8', category: 'main', icon: '۳' },
+            { id: 4, name: 'شبکه ۴', url: 'http://92.42.50.29/PLTV/88888888/224/3221226140/index.m3u8', category: 'main', icon: '۴' },
+            { id: 5, name: 'شبکه ۵', url: 'http://92.42.50.29/PLTV/88888888/224/3221226141/index.m3u8', category: 'main', icon: '۵' },
+            { id: 6, name: 'شبکه خبر', url: 'http://92.42.50.29/PLTV/88888888/224/3221226142/index.m3u8', category: 'main', icon: '📰' },
+            { id: 7, name: 'شبکه پویا', url: 'http://92.42.50.29/PLTV/88888888/224/3221226145/index.m3u8', category: 'main', icon: '🎨' },
+            { id: 8, name: 'شبکه تماشا', url: 'http://92.42.50.29/PLTV/88888888/224/3221226879/index.m3u8', category: 'main', icon: '👀' },
+            { id: 9, name: 'شبکه نمایش', url: 'http://92.42.50.29/PLTV/88888888/224/3221226148/index.m3u8', category: 'main', icon: '🎬' },
+            { id: 10, name: 'شبکه نسیم', url: 'http://92.42.50.29/PLTV/88888888/224/3221226653/index.m3u8', category: 'main', icon: '🌸' },
+            { id: 11, name: 'شبکه آی فیلم', url: 'http://92.42.50.29/PLTV/88888888/224/3221226842/index.m3u8', category: 'main', icon: '🎥' },
+            { id: 12, name: 'شبکه ورزش', url: 'http://92.42.50.29/PLTV/88888888/224/3221226845/index.m3u8', category: 'main', icon: '⚽' },
+            // Special Channels
+            { id: 13, name: 'شبکه امید', url: 'http://92.42.50.29/PLTV/88888888/224/3221226159/index.m3u8', category: 'special', icon: '🌟' },
+            { id: 14, name: 'شبکه افق', url: 'http://92.42.50.29/PLTV/88888888/224/3221226143/index.m3u8', category: 'special', icon: '🌅' },
+            { id: 15, name: 'شبکه مستند', url: 'http://92.42.50.29/PLTV/88888888/224/3221226901/index.m3u8', category: 'special', icon: '🎞️' },
+            { id: 16, name: 'شبکه آموزش', url: 'http://92.42.50.29/PLTV/88888888/224/3221226151/index.m3u8', category: 'special', icon: '📚' },
+            { id: 17, name: 'شبکه سلامت', url: 'http://92.42.50.29/PLTV/88888888/224/3221226152/index.m3u8', category: 'special', icon: '🏥' },
+            { id: 18, name: 'شبکه قرآن', url: 'http://92.42.50.29/PLTV/88888888/224/3221226144/index.m3u8', category: 'special', icon: '📖' },
+            // Provincial Channels
+            { id: 19, name: 'شبکه مازندران', url: 'http://92.42.50.29/PLTV/88888888/224/3221226786/index.m3u8', category: 'provincial', icon: '🌲' },
+            { id: 20, name: 'شبکه آذربایجان غربی', url: 'http://92.42.50.29/PLTV/88888888/224/3221226800/index.m3u8', category: 'provincial', icon: '🏔️' },
+            { id: 21, name: 'شبکه کرمان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226856/index.m3u8', category: 'provincial', icon: '🏜️' },
+            { id: 22, name: 'شبکه افلاک لرستان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226675/index.m3u8', category: 'provincial', icon: '⛰️' },
+            { id: 23, name: 'شبکه اصفهان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226652/index.m3u8', category: 'provincial', icon: '🕌' },
+            { id: 24, name: 'شبکه فارس', url: 'http://92.42.50.29/PLTV/88888888/224/3221226701/index.m3u8', category: 'provincial', icon: '🌹' },
+            { id: 25, name: 'شبکه کردستان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226647/index.m3u8', category: 'provincial', icon: '🌄' },
+            { id: 26, name: 'شبکه خوزستان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226415/index.m3u8', category: 'provincial', icon: '🌴' },
+            { id: 27, name: 'شبکه سهند', url: 'http://92.42.50.29/PLTV/88888888/224/3221226423/index.m3u8', category: 'provincial', icon: '🗻' },
+            { id: 28, name: 'شبکه قزوین', url: 'http://92.42.50.29/PLTV/88888888/224/3221226888/index.m3u8', category: 'provincial', icon: '🏛️' },
+            { id: 29, name: 'شبکه آفتاب', url: 'http://92.42.50.29/PLTV/88888888/224/3221226899/index.m3u8', category: 'provincial', icon: '☀️' },
+            { id: 30, name: 'شبکه باران', url: 'http://92.42.50.29/PLTV/88888888/224/3221226902/index.m3u8', category: 'provincial', icon: '🌧️' },
+            // International Channels
+            { id: 31, name: 'شبکه پرس تی وی', url: 'http://92.42.50.29/PLTV/88888888/224/3221226156/index.m3u8', category: 'international', icon: '🌐' },
+            { id: 32, name: 'شبکه العالم', url: 'http://92.42.50.29/PLTV/88888888/224/3221226157/index.m3u8', category: 'international', icon: '🌍' },
+            { id: 33, name: 'شبکه الکوثر', url: 'http://92.42.50.29/PLTV/88888888/224/3221226158/index.m3u8', category: 'international', icon: '🕋' },
+            { id: 34, name: 'شبکه جام جم', url: 'http://92.42.50.29/PLTV/88888888/224/3221226178/index.m3u8', category: 'international', icon: '🏆' },
+            { id: 35, name: 'شبکه سپهر', url: 'http://92.42.50.29/PLTV/88888888/224/3221226161/index.m3u8', category: 'international', icon: '🛡️' },
+            { id: 36, name: 'شبکه هیسپان تی وی', url: 'http://92.42.50.29/PLTV/88888888/224/3221226471/index.m3u8', category: 'international', icon: '🇪🇸' },
+            // Radio Stations
+            { id: 37, name: 'رادیو ورزش بانوان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226789/index.m3u8', category: 'radio', icon: '🏃‍♀️' },
+            { id: 38, name: 'رادیو ایران', url: 'http://92.42.50.29/PLTV/88888888/224/3221226162/index.m3u8', category: 'radio', icon: '🇮🇷' },
+            { id: 39, name: 'رادیو فرهنگ', url: 'http://92.42.50.29/PLTV/88888888/224/3221226163/index.m3u8', category: 'radio', icon: '🎭' },
+            { id: 40, name: 'رادیو قرآن', url: 'http://92.42.50.29/PLTV/88888888/224/3221226166/index.m3u8', category: 'radio', icon: '📿' },
+            { id: 41, name: 'رادیو معارف', url: 'http://92.42.50.29/PLTV/88888888/224/3221226164/index.m3u8', category: 'radio', icon: '📕' },
+            { id: 42, name: 'رادیو جوان', url: 'http://92.42.50.29/PLTV/88888888/224/3221226165/index.m3u8', category: 'radio', icon: '🎧' },
+            { id: 43, name: 'رادیو پیام', url: 'http://92.42.50.29/PLTV/88888888/224/3221226167/index.m3u8', category: 'radio', icon: '💬' },
+            { id: 44, name: 'رادیو آوا', url: 'http://92.42.50.29/PLTV/88888888/224/3221226168/index.m3u8', category: 'radio', icon: '🎵' },
+            { id: 45, name: 'رادیو ورزش', url: 'http://92.42.50.29/PLTV/88888888/224/3221226169/index.m3u8', category: 'radio', icon: '🏅' },
+            { id: 46, name: 'رادیو صبا', url: 'http://92.42.50.29/PLTV/88888888/224/3221226459/index.m3u8', category: 'radio', icon: '🌅' },
+            { id: 47, name: 'رادیو نمایش', url: 'http://92.42.50.29/PLTV/88888888/224/3221226467/index.m3u8', category: 'radio', icon: '🎪' },
+            { id: 48, name: 'رادیو گفتگو', url: 'http://92.42.50.29/PLTV/88888888/224/3221226453/index.m3u8', category: 'radio', icon: '🗣️' },
+            { id: 49, name: 'رادیو اقتصاد', url: 'http://92.42.50.29/PLTV/88888888/224/3221226450/index.m3u8', category: 'radio', icon: '💰' },
+            { id: 50, name: 'رادیو سلامت', url: 'http://92.42.50.29/PLTV/88888888/224/3221226464/index.m3u8', category: 'radio', icon: '❤️' },
+            { id: 51, name: 'رادیو انگلیسی', url: 'http://92.42.50.29/PLTV/88888888/224/3221226465/index.m3u8', category: 'radio', icon: '🇬🇧' },
+            // Other Channels
+            { id: 52, name: 'ایران اینترنشنال', url: 'https://dev-live.livetvstream.co.uk/LS-63503-4/index.m3u8', category: 'other', icon: '🌐' },
+            { id: 53, name: 'بی‌بی‌سی فارسی', url: 'https://vs-hls-pushb-ww-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_persian_tv/pc_hd_abr_v2.m3u8', category: 'other', icon: '📡' },
+            { id: 54, name: 'من و تو', url: 'https://dh4wkqcyy8768.cloudfront.net/live.m3u8', category: 'other', icon: '💜' },
+        ];
+        const categoryNames = {
+            'main': 'شبکه‌های اصلی',
+            'special': 'شبکه‌های تخصصی',
+            'provincial': 'شبکه‌های استانی',
+            'international': 'شبکه‌های بین‌المللی',
+            'radio': 'رادیوها',
+            'other': 'سایر شبکه‌ها'
+        };
+        let hls = null;
+        let currentChannel = null;
+        let currentCategory = 'all';
+        const video = document.getElementById('videoPlayer');
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderChannels();
+        });
+        // Render Channels
+        function renderChannels() {
+            const grid = document.getElementById('channelsGrid');
+            const filteredChannels = currentCategory === 'all' 
+                ? channels 
+                : channels.filter(ch => ch.category === currentCategory);
+            grid.innerHTML = filteredChannels.map(channel => `
+                <div class="channel-card cursor-pointer bg-slate-800/50 hover:bg-slate-700/50 rounded-xl p-4 transition-all duration-300 border border-slate-700 hover:border-blue-500 ${currentChannel?.id === channel.id ? 'ring-2 ring-blue-500 bg-blue-900/30' : ''}"
+                     onclick="playChannel(${channel.id})">
+                    <div class="text-center">
+                        <div class="w-14 h-14 mx-auto mb-3 bg-gradient-to-br from-slate-700 to-slate-600 rounded-xl flex items-center justify-center text-2xl">
+                            ${channel.icon}
+                        </div>
+                        <h3 class="font-medium text-sm text-white truncate">${channel.name}</h3>
+                        <p class="text-xs text-slate-400 mt-1">${channel.category === 'radio' ? '📻 رادیو' : '📺 تلویزیون'}</p>
+                    </div>
+                </div>
+            `).join('');
+        }
+        // Filter Category
+        function filterCategory(category) {
+            currentCategory = category;
+            
+            // Update button styles
+            document.querySelectorAll('.category-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.category === category) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            renderChannels();
+        }
+        // Play Channel
+        function playChannel(channelId) {
+            const channel = channels.find(ch => ch.id === channelId);
+            if (!channel) return;
+            currentChannel = channel;
+            
+            // Update UI
+            document.getElementById('currentChannelName').textContent = channel.name;
+            document.getElementById('currentChannelCategory').textContent = categoryNames[channel.category] || '';
+            document.getElementById('currentChannelIcon').textContent = channel.icon;
+            
+            // Hide placeholder, show loading
+            document.getElementById('placeholderOverlay').classList.add('hidden');
+            document.getElementById('errorOverlay').classList.add('hidden');
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+            // Load video
+            loadVideo(channel.url);
+            
+            // Re-render to show active state
+            renderChannels();
+            
+            // Scroll to player on mobile
+            if (window.innerWidth < 768) {
+                document.querySelector('.player-container').scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+        // Load Video with HLS.js
+        function loadVideo(url) {
+            // Cleanup previous instance
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                });
+                
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    video.play().catch(e => console.log('Autoplay prevented'));
+                    updateQualityOptions(data.levels);
+                    updatePlayPauseIcon();
+                });
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        document.getElementById('loadingOverlay').classList.add('hidden');
+                        document.getElementById('errorOverlay').classList.remove('hidden');
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Safari native HLS support
+                video.src = url;
+                video.addEventListener('loadedmetadata', () => {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    video.play().catch(e => console.log('Autoplay prevented'));
+                    updatePlayPauseIcon();
+                });
+                video.addEventListener('error', () => {
+                    document.getElementById('loadingOverlay').classList.add('hidden');
+                    document.getElementById('errorOverlay').classList.remove('hidden');
+                });
+            }
+        }
+        // Update Quality Options
+        function updateQualityOptions(levels) {
+            const menu = document.getElementById('qualityMenu');
+            
+            if (!levels || levels.length === 0) {
+                menu.innerHTML = '<div class="px-4 py-2 text-slate-400">کیفیت ثابت</div>';
+                return;
+            }
+            let options = '<button onclick="setQuality(-1)" class="w-full px-4 py-3 text-right hover:bg-slate-700 transition flex items-center justify-between"><span>خودکار</span><span class="text-xs text-slate-400">Auto</span></button>';
+            
+            levels.forEach((level, index) => {
+                const height = level.height || 'N/A';
+                const label = height >= 1080 ? 'Full HD' : height >= 720 ? 'HD' : height >= 480 ? 'SD' : 'Low';
+                options += `<button onclick="setQuality(${index})" class="w-full px-4 py-3 text-right hover:bg-slate-700 transition flex items-center justify-between"><span>${height}p</span><span class="text-xs text-slate-400">${label}</span></button>`;
+            });
+            
+            menu.innerHTML = options;
+        }
+        // Set Quality
+        function setQuality(levelIndex) {
+            if (hls) {
+                hls.currentLevel = levelIndex;
+                const qualityText = levelIndex === -1 ? 'خودکار' : `${hls.levels[levelIndex]?.height || ''}p`;
+                document.getElementById('currentQuality').textContent = qualityText;
+            }
+            toggleQualityMenu();
+        }
+        // Toggle Quality Menu
+        function toggleQualityMenu() {
+            document.getElementById('qualityMenu').classList.toggle('show');
+        }
+        // Close quality menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.relative')) {
+                document.getElementById('qualityMenu').classList.remove('show');
+            }
+        });
+        // Toggle Play/Pause
+        function togglePlayPause() {
+            if (!currentChannel) return;
+            
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+            updatePlayPauseIcon();
+        }
+        // Update Play/Pause Icon
+        function updatePlayPauseIcon() {
+            const playIcon = document.getElementById('playIcon');
+            const pauseIcon = document.getElementById('pauseIcon');
+            
+            if (video.paused) {
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+            } else {
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+            }
+        }
+        // Video events
+        video.addEventListener('play', updatePlayPauseIcon);
+        video.addEventListener('pause', updatePlayPauseIcon);
+        // Go Live (refresh to current time)
+        function goLive() {
+            if (!currentChannel) return;
+            
+            if (hls) {
+                // Jump to live edge
+                video.currentTime = video.duration - 1;
+            }
+            video.play();
+            updatePlayPauseIcon();
+        }
+        // Retry Play
+        function retryPlay() {
+            if (currentChannel) {
+                playChannel(currentChannel.id);
+            }
+        }
+        // Toggle Fullscreen
+        function toggleFullscreen() {
+            const playerContainer = document.querySelector('.player-container');
+            
+            if (!document.fullscreenElement) {
+                if (playerContainer.requestFullscreen) {
+                    playerContainer.requestFullscreen();
+                } else if (playerContainer.webkitRequestFullscreen) {
+                    playerContainer.webkitRequestFullscreen();
+                } else if (video.webkitEnterFullscreen) {
+                    video.webkitEnterFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                togglePlayPause();
+            } else if (e.code === 'KeyF') {
+                toggleFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>
